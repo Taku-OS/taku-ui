@@ -88,11 +88,13 @@ export async function add(components: string[], options: AddOptions) {
     try {
       const autoConfig = await autoDetectConfig(cwd)
       config = autoConfig as any
-      
+
+      const detectedConfig = config as NonNullable<typeof config>
+
       logger.info('✓ Project structure detected')
-      logger.info(`  Components: ${config.aliases.components}`)
-      logger.info(`  Utils: ${config.aliases.utils}`)
-      logger.info(`  TypeScript: ${config.tsx ? 'Yes' : 'No'}`)
+      logger.info(`  Components: ${detectedConfig.aliases.components}`)
+      logger.info(`  Utils: ${detectedConfig.aliases.utils}`)
+      logger.info(`  TypeScript: ${detectedConfig.tsx ? 'Yes' : 'No'}`)
       logger.break()
       logger.info('💡 Tip: Run "taku-ui init" to customize these settings.')
       logger.break()
@@ -103,9 +105,16 @@ export async function add(components: string[], options: AddOptions) {
     }
   }
 
+  if (!config) {
+    logger.error('Configuration is missing. Please run "taku-ui init" to set it up.')
+    process.exit(1)
+  }
+
+  const resolvedConfig = config as NonNullable<typeof config>
+
   // Get registry path/URL
   // Priority: config.registryUrl > env TAKU_UI_REGISTRY_URL > local dev path
-  const registryPath = (config as any).registryUrl 
+  const registryPath = (resolvedConfig as any).registryUrl 
     || process.env.TAKU_UI_REGISTRY_URL 
     || (() => {
       // Try local registry for development (only if exists)
@@ -155,14 +164,14 @@ export async function add(components: string[], options: AddOptions) {
 
   try {
     for (const componentName of components) {
-      await installComponent(componentName, config, registryPath, options.overwrite || false)
+      await installComponent(componentName, resolvedConfig, registryPath, options.overwrite || false)
     }
 
     spinner.succeed('Components installed successfully!')
     logger.break()
     logger.success(`Added ${components.length} component(s).`)
     logger.info(`\nYou can now import them in your project:`)
-    logger.info(chalk.cyan(`  import { Button } from '${config.aliases.components}/ui/button'`))
+    logger.info(chalk.cyan(`  import { Button } from '${resolvedConfig.aliases.components}/ui/button'`))
     logger.break()
   } catch (error) {
     spinner.fail('Failed to install components')

@@ -13,16 +13,12 @@ Beautiful UI components for React with Tailwind CSS.
 
 ## Quick Start
 
-### Installation
-
 ```bash
-npx taku-ui init
+npx taku-ui@latest add window-controls
 ```
 
-### Add Components
-
 ```bash
-npx taku-ui add button
+npx taku-ui@latest add window-control-icons
 ```
 
 ## Documentation
@@ -43,16 +39,27 @@ taku-ui/
 
 ## Development
 
+### 1. 安装依赖
+
 ```bash
-# Install dependencies
 pnpm install
+```
 
-# Start dev server
-pnpm dev
+### 2. 构建 CLI
 
-# Build all packages
+```bash
+cd packages/cli
 pnpm build
 ```
+
+### 3. 启动文档网站
+
+```bash
+cd apps/www
+pnpm dev
+```
+
+访问 http://localhost:3000 查看文档网站。
 
 ## License
 

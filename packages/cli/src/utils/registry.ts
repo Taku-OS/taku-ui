@@ -75,7 +75,13 @@ async function fetchFromGitHubAPI(owner: string, repo: string, branch: string, p
             `See PRIVATE_REPO_SETUP.md for detailed instructions.`
           )
         }
-        throw new Error(`Authentication failed. Please check your GitHub token has access to ${owner}/${repo}`)
+        // If we get 401/403 with a token, the token might be invalid or expired
+        // Or the repository might be public but we're trying to use GitHub API unnecessarily
+        throw new Error(
+          `Authentication failed. Please check your GitHub token has access to ${owner}/${repo}.\n\n` +
+          `If the repository is public, you can remove TAKU_UI_GITHUB_TOKEN to use public access:\n` +
+          `  unset TAKU_UI_GITHUB_TOKEN`
+        )
       }
       throw new Error(`Failed to fetch from GitHub API: ${response.status} ${response.statusText}`)
     }

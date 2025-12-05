@@ -1,6 +1,6 @@
 {
   "name": "taku-ui",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "CLI for adding Taku UI components to your project",
   "main": "dist/index.js",
   "bin": {
