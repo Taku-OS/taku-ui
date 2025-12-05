@@ -14,6 +14,12 @@ export async function getConfig(cwd: string): Promise<RawConfig | null> {
 
     const configContent = await fs.readJSON(configPath)
     
+    // If config file exists but is incomplete, return null to trigger auto-detection
+    // This handles cases where init was interrupted or config is corrupted
+    if (!configContent.tailwind || !configContent.tailwind.config || !configContent.tailwind.css) {
+      return null
+    }
+    
     // Ensure boolean fields are actually booleans (handle string values)
     if (typeof configContent.rsc !== 'boolean') {
       if (configContent.rsc === 'true') {
@@ -46,20 +52,26 @@ export async function getConfig(cwd: string): Promise<RawConfig | null> {
       }
     }
     
-    const config = configSchema.parse(configContent)
+    try {
+      const config = configSchema.parse(configContent)
 
-    return {
-      ...config,
-      resolvedPaths: {
-        tailwindConfig: path.resolve(cwd, config.tailwind.config),
-        tailwindCss: path.resolve(cwd, config.tailwind.css),
-        utils: resolveImport(config.aliases.utils, cwd),
-        components: resolveImport(config.aliases.components, cwd),
-        ui: config.aliases.ui ? resolveImport(config.aliases.ui, cwd) : undefined,
-      },
+      return {
+        ...config,
+        resolvedPaths: {
+          tailwindConfig: path.resolve(cwd, config.tailwind.config),
+          tailwindCss: path.resolve(cwd, config.tailwind.css),
+          utils: resolveImport(config.aliases.utils, cwd),
+          components: resolveImport(config.aliases.components, cwd),
+          ui: config.aliases.ui ? resolveImport(config.aliases.ui, cwd) : undefined,
+        },
+      }
+    } catch (parseError) {
+      // If schema validation fails, return null to trigger auto-detection
+      return null
     }
   } catch (error) {
-    throw new Error(`Failed to read config file: ${error}`)
+    // If file read fails, return null to trigger auto-detection
+    return null
   }
 }
 

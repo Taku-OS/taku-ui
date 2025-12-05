@@ -64,6 +64,17 @@ async function fetchFromGitHubAPI(owner: string, repo: string, branch: string, p
         throw new Error(`File not found: ${path}`)
       }
       if (response.status === 401 || response.status === 403) {
+        const token = getGitHubToken()
+        if (!token) {
+          throw new Error(
+            `Authentication failed. This appears to be a private repository.\n\n` +
+            `Please set TAKU_UI_GITHUB_TOKEN environment variable:\n` +
+            `  export TAKU_UI_GITHUB_TOKEN=ghp_xxxxxxxxxxxx\n\n` +
+            `Or make the repository public at:\n` +
+            `  https://github.com/${owner}/${repo}/settings\n\n` +
+            `See PRIVATE_REPO_SETUP.md for detailed instructions.`
+          )
+        }
         throw new Error(`Authentication failed. Please check your GitHub token has access to ${owner}/${repo}`)
       }
       throw new Error(`Failed to fetch from GitHub API: ${response.status} ${response.statusText}`)
@@ -91,20 +102,7 @@ async function fetchFromGitHubAPI(owner: string, repo: string, branch: string, p
  * Supports both public (raw.githubusercontent.com) and private (GitHub API) repositories
  */
 async function fetchRemoteRegistry(registryUrl: string): Promise<any[]> {
-  // If GitHub token is provided, use GitHub API (for private repos)
-  if (shouldUseGitHubAPI()) {
-    // Parse registry URL to extract owner, repo, branch
-    // Format: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/registry
-    const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
-    if (match) {
-      const [, owner, repo, branch] = match
-      return await fetchFromGitHubAPI(owner, repo, branch, 'registry/index.json')
-    }
-    // Fallback to default values
-    return await fetchFromGitHubAPI(DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPO, DEFAULT_GITHUB_BRANCH, 'registry/index.json')
-  }
-
-  // Use raw.githubusercontent.com for public repositories
+  // Try raw.githubusercontent.com first (for public repos)
   const indexPath = `${registryUrl}/index.json`
   
   try {
@@ -114,17 +112,65 @@ async function fetchRemoteRegistry(registryUrl: string): Promise<any[]> {
       },
     })
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`Registry not found. If this is a private repository, please set TAKU_UI_GITHUB_TOKEN environment variable.`)
-      }
-      throw new Error(`Failed to fetch registry: ${response.status} ${response.statusText}`)
+    if (response.ok) {
+      const data = await response.json()
+      return Array.isArray(data) ? data : []
     }
 
-    const data = await response.json()
-    return Array.isArray(data) ? data : []
+    // If 404 and we have a token, try GitHub API (for private repos)
+    if (response.status === 404 && shouldUseGitHubAPI()) {
+      const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
+      if (match) {
+        const [, owner, repo, branch] = match
+        return await fetchFromGitHubAPI(owner, repo, branch, 'registry/index.json')
+      }
+      // Fallback to default values
+      return await fetchFromGitHubAPI(DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPO, DEFAULT_GITHUB_BRANCH, 'registry/index.json')
+    }
+
+    // If 404 and no token, provide helpful error message
+    if (response.status === 404) {
+      const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
+      if (match) {
+        const [, owner, repo] = match
+        throw new Error(
+          `Registry not found at ${indexPath}\n\n` +
+          `This appears to be a private repository (${owner}/${repo}).\n\n` +
+          `Please set TAKU_UI_GITHUB_TOKEN environment variable:\n` +
+          `  export TAKU_UI_GITHUB_TOKEN=ghp_xxxxxxxxxxxx\n\n` +
+          `Or make the repository public at:\n` +
+          `  https://github.com/${owner}/${repo}/settings\n\n` +
+          `See PRIVATE_REPO_SETUP.md for detailed instructions.`
+        )
+      }
+      throw new Error(`Registry not found at ${indexPath}`)
+    }
+
+    throw new Error(`Failed to fetch registry: ${response.status} ${response.statusText}`)
   } catch (error) {
-    throw new Error(`Failed to fetch registry from ${indexPath}: ${error}`)
+    // Only try GitHub API if it's a network error and we have a token
+    // Don't try if it's a different error (like JSON parse error)
+    if (shouldUseGitHubAPI() && error instanceof Error) {
+      // Only retry with GitHub API if it's a network/404 error
+      const isNetworkError = error.message.includes('fetch') || 
+                             error.message.includes('network') ||
+                             error.message.includes('ECONNREFUSED') ||
+                             error.message.includes('ETIMEDOUT')
+      
+      if (isNetworkError || error.message.includes('not found')) {
+        const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
+        if (match) {
+          const [, owner, repo, branch] = match
+          try {
+            return await fetchFromGitHubAPI(owner, repo, branch, 'registry/index.json')
+          } catch (apiError) {
+            // If API also fails, throw original error with better message
+            throw error
+          }
+        }
+      }
+    }
+    throw error
   }
 }
 
@@ -133,19 +179,7 @@ async function fetchRemoteRegistry(registryUrl: string): Promise<any[]> {
  * Supports both public (raw.githubusercontent.com) and private (GitHub API) repositories
  */
 async function fetchRemoteComponent(name: string, registryUrl: string): Promise<any> {
-  // If GitHub token is provided, use GitHub API (for private repos)
-  if (shouldUseGitHubAPI()) {
-    // Parse registry URL to extract owner, repo, branch
-    const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
-    if (match) {
-      const [, owner, repo, branch] = match
-      return await fetchFromGitHubAPI(owner, repo, branch, `registry/components/${name}.json`)
-    }
-    // Fallback to default values
-    return await fetchFromGitHubAPI(DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPO, DEFAULT_GITHUB_BRANCH, `registry/components/${name}.json`)
-  }
-
-  // Use raw.githubusercontent.com for public repositories
+  // Try raw.githubusercontent.com first (for public repos)
   const componentUrl = `${registryUrl}/components/${name}.json`
   
   try {
@@ -155,15 +189,63 @@ async function fetchRemoteComponent(name: string, registryUrl: string): Promise<
       },
     })
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`Component "${name}" not found in registry`)
-      }
-      throw new Error(`Failed to fetch component: ${response.status} ${response.statusText}`)
+    if (response.ok) {
+      return await response.json()
     }
 
-    return await response.json()
+    // If 404 and we have a token, try GitHub API (for private repos)
+    if (response.status === 404 && shouldUseGitHubAPI()) {
+      const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
+      if (match) {
+        const [, owner, repo, branch] = match
+        return await fetchFromGitHubAPI(owner, repo, branch, `registry/components/${name}.json`)
+      }
+      // Fallback to default values
+      return await fetchFromGitHubAPI(DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPO, DEFAULT_GITHUB_BRANCH, `registry/components/${name}.json`)
+    }
+
+    // If 404 and no token, provide helpful error message
+    if (response.status === 404) {
+      const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
+      if (match) {
+        const [, owner, repo] = match
+        throw new Error(
+          `Component "${name}" not found at ${componentUrl}\n\n` +
+          `This appears to be a private repository (${owner}/${repo}).\n\n` +
+          `Please set TAKU_UI_GITHUB_TOKEN environment variable:\n` +
+          `  export TAKU_UI_GITHUB_TOKEN=ghp_xxxxxxxxxxxx\n\n` +
+          `Or make the repository public at:\n` +
+          `  https://github.com/${owner}/${repo}/settings\n\n` +
+          `See PRIVATE_REPO_SETUP.md for detailed instructions.`
+        )
+      }
+      throw new Error(`Component "${name}" not found in registry`)
+    }
+
+    throw new Error(`Failed to fetch component: ${response.status} ${response.statusText}`)
   } catch (error) {
+    // Only try GitHub API if it's a network error and we have a token
+    // Don't try if it's a different error (like JSON parse error)
+    if (shouldUseGitHubAPI() && error instanceof Error) {
+      // Only retry with GitHub API if it's a network/404 error
+      const isNetworkError = error.message.includes('fetch') || 
+                             error.message.includes('network') ||
+                             error.message.includes('ECONNREFUSED') ||
+                             error.message.includes('ETIMEDOUT')
+      
+      if (isNetworkError || error.message.includes('not found')) {
+        const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
+        if (match) {
+          const [, owner, repo, branch] = match
+          try {
+            return await fetchFromGitHubAPI(owner, repo, branch, `registry/components/${name}.json`)
+          } catch (apiError) {
+            // If API also fails, throw original error with better message
+            throw error
+          }
+        }
+      }
+    }
     if (error instanceof Error && error.message.includes('not found')) {
       throw error
     }
