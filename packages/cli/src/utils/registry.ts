@@ -194,21 +194,33 @@ async function fetchRemoteComponent(name: string, registryUrl: string): Promise<
     }
 
     // If 404 and we have a token, try GitHub API (for private repos)
+    // Only try GitHub API if we get a 404, indicating the repo might be private
     if (response.status === 404 && shouldUseGitHubAPI()) {
       const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
       if (match) {
         const [, owner, repo, branch] = match
-        return await fetchFromGitHubAPI(owner, repo, branch, `registry/components/${name}.json`)
+        try {
+          return await fetchFromGitHubAPI(owner, repo, branch, `registry/components/${name}.json`)
+        } catch (apiError) {
+          // If GitHub API also fails, fall through to show the original 404 error
+          // This handles cases where the repo is public but component doesn't exist
+        }
       }
-      // Fallback to default values
-      return await fetchFromGitHubAPI(DEFAULT_GITHUB_OWNER, DEFAULT_GITHUB_REPO, DEFAULT_GITHUB_BRANCH, `registry/components/${name}.json`)
     }
 
-    // If 404 and no token, provide helpful error message
+    // If 404 and no token, or GitHub API also failed, provide helpful error message
     if (response.status === 404) {
       const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
       if (match) {
         const [, owner, repo] = match
+        // Check if we tried GitHub API and it failed
+        if (shouldUseGitHubAPI()) {
+          throw new Error(
+            `Component "${name}" not found in registry.\n\n` +
+            `The repository ${owner}/${repo} appears to be public, but the component "${name}" doesn't exist.\n\n` +
+            `Available components can be listed with: npx taku-ui@latest add`
+          )
+        }
         throw new Error(
           `Component "${name}" not found at ${componentUrl}\n\n` +
           `This appears to be a private repository (${owner}/${repo}).\n\n` +
@@ -224,32 +236,32 @@ async function fetchRemoteComponent(name: string, registryUrl: string): Promise<
 
     throw new Error(`Failed to fetch component: ${response.status} ${response.statusText}`)
   } catch (error) {
-    // Only try GitHub API if it's a network error and we have a token
-    // Don't try if it's a different error (like JSON parse error)
+    // Only try GitHub API if it's a network error (not a response error)
+    // This handles cases where fetch itself fails (network issues, CORS, etc.)
     if (shouldUseGitHubAPI() && error instanceof Error) {
-      // Only retry with GitHub API if it's a network/404 error
-      const isNetworkError = error.message.includes('fetch') || 
+      // Check if this is a network error (not a response error)
+      // Response errors are handled above, so this should only catch network-level errors
+      const isNetworkError = (error.message.includes('fetch') && !error.message.includes('status')) || 
                              error.message.includes('network') ||
                              error.message.includes('ECONNREFUSED') ||
-                             error.message.includes('ETIMEDOUT')
+                             error.message.includes('ETIMEDOUT') ||
+                             error.message.includes('ENOTFOUND')
       
-      if (isNetworkError || error.message.includes('not found')) {
+      if (isNetworkError) {
         const match = registryUrl.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/registry/)
         if (match) {
           const [, owner, repo, branch] = match
           try {
             return await fetchFromGitHubAPI(owner, repo, branch, `registry/components/${name}.json`)
           } catch (apiError) {
-            // If API also fails, throw original error with better message
-            throw error
+            // If API also fails, throw original network error
+            throw new Error(`Network error: Failed to fetch component "${name}" from ${componentUrl}. ${error.message}`)
           }
         }
       }
     }
-    if (error instanceof Error && error.message.includes('not found')) {
-      throw error
-    }
-    throw new Error(`Failed to fetch component "${name}" from ${componentUrl}: ${error}`)
+    // Re-throw the error if we can't handle it
+    throw error
   }
 }
 
