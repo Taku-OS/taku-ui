@@ -167,21 +167,49 @@ npx taku-ui@latest add window-controls
 
 ## 🔒 私有 Registry（高级）
 
-如果你需要私有 Registry（不开源），可以：
+如果你的仓库是私有的，CLI 会自动检测并使用 GitHub API 来访问组件。
 
-### 方案 1: GitHub 私有仓库 + Personal Access Token
+### 方案 1: 使用 GitHub Personal Access Token（推荐）
 
-1. 创建私有 GitHub 仓库（在组织或个人账户下）
-2. 生成 Personal Access Token（需要 `repo` 权限）
-3. 在 Registry URL 中包含 token：
+1. **生成 Personal Access Token**：
+   - 访问：GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+   - 点击 "Generate new token (classic)"
+   - 选择权限：至少需要 `repo` 权限（对于私有仓库）
+   - 对于组织仓库，确保 token 有访问该组织的权限
+   - 复制生成的 token（格式：`ghp_xxxxxxxxxxxx`）
 
-```
-https://YOUR_TOKEN@raw.githubusercontent.com/YOUR_ORG_NAME/taku-ui/main/registry
-```
+2. **设置环境变量**：
+   ```bash
+   # macOS/Linux
+   export TAKU_UI_GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+   
+   # Windows (PowerShell)
+   $env:TAKU_UI_GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+   
+   # Windows (CMD)
+   set TAKU_UI_GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+   ```
 
-> ⚠️ **注意**：对于组织仓库，确保 token 有访问该组织的权限。
+3. **使用 CLI**：
+   ```bash
+   # CLI 会自动检测 token 并使用 GitHub API
+   npx taku-ui@latest add window-controls
+   ```
 
-⚠️ **注意**：这种方式 token 会暴露在配置文件中，不够安全。
+> ✅ **优势**：Token 不会暴露在 URL 或配置文件中，更安全。
+
+### 方案 2: 改为公开仓库（如果组件库是开源的）
+
+如果你的组件库是开源的，最简单的方式是将仓库改为公开：
+
+1. 在 GitHub 仓库设置中：
+   - Settings → General → Danger Zone
+   - Change repository visibility → Make public
+
+2. 之后就可以直接使用，无需 token：
+   ```bash
+   npx taku-ui@latest add window-controls
+   ```
 
 ### 方案 2: 自建服务器
 
@@ -214,12 +242,92 @@ https://YOUR_TOKEN@raw.githubusercontent.com/YOUR_ORG_NAME/taku-ui/main/registry
 
 ## 🐛 故障排除
 
+### 问题：404 Not Found 错误
+
+当你访问 Registry URL 时出现 404 错误，可能的原因和解决方案：
+
+#### 1. 仓库尚未创建或推送
+
+**检查步骤**：
+```bash
+# 检查是否已推送到 GitHub
+git remote -v
+
+# 如果没有远程仓库，添加并推送
+git remote add origin https://github.com/Taku-OS/taku-ui.git
+git push -u origin main
+```
+
+**解决方案**：
+- 确保仓库已在 GitHub 上创建
+- 确保 `registry/` 目录已提交并推送
+- 验证文件是否在正确的分支上
+
+#### 2. 分支名不正确
+
+**检查步骤**：
+访问以下 URL 测试不同分支：
+- `https://raw.githubusercontent.com/Taku-OS/taku-ui/main/registry/index.json`
+- `https://raw.githubusercontent.com/Taku-OS/taku-ui/master/registry/index.json`
+
+**解决方案**：
+如果默认分支是 `master` 而不是 `main`，更新 `registry.ts` 中的 URL：
+```typescript
+const DEFAULT_REGISTRY_URL = 'https://raw.githubusercontent.com/Taku-OS/taku-ui/master/registry'
+```
+
+#### 3. 文件路径不正确
+
+**检查步骤**：
+1. 在 GitHub 上查看仓库，确认 `registry/index.json` 文件存在
+2. 检查文件路径大小写是否匹配（GitHub 对大小写敏感）
+
+**解决方案**：
+- 确保文件路径完全匹配
+- 检查是否有拼写错误
+
+#### 4. 仓库是私有的 ⚠️
+
+**检查步骤**：
+- 确认仓库的可见性设置
+- 尝试在浏览器中访问仓库主页（需要登录）
+
+**解决方案**：
+- **方案 1（推荐）**：设置 GitHub Token 环境变量
+  ```bash
+  export TAKU_UI_GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+  ```
+  CLI 会自动使用 GitHub API 访问私有仓库。
+
+- **方案 2**：将仓库改为公开（如果组件库是开源的）
+  - Settings → General → Danger Zone → Make public
+
+#### 5. 快速验证清单
+
+```bash
+# 1. 检查本地文件是否存在
+ls -la registry/index.json
+
+# 2. 检查 Git 状态
+git status
+
+# 3. 检查远程仓库
+git remote -v
+
+# 4. 检查当前分支
+git branch
+
+# 5. 验证推送
+git log --oneline -5
+```
+
 ### 问题：无法获取 Registry
 
 **解决方案**：
 - 检查 GitHub URL 是否正确
 - 确认仓库是公开的（或已配置认证）
 - 检查网络连接
+- 验证组织名称是否正确（`Taku-OS`）
 
 ### 问题：组件安装失败
 
@@ -227,6 +335,7 @@ https://YOUR_TOKEN@raw.githubusercontent.com/YOUR_ORG_NAME/taku-ui/main/registry
 - 检查组件 JSON 格式是否正确
 - 确认组件文件内容格式正确
 - 查看错误信息中的具体 URL
+- 验证组件文件是否已推送到 GitHub
 
 ### 问题：本地开发时无法使用
 
@@ -234,6 +343,7 @@ https://YOUR_TOKEN@raw.githubusercontent.com/YOUR_ORG_NAME/taku-ui/main/registry
 - CLI 会自动检测本地 `registry/` 目录
 - 如果存在本地 registry，优先使用本地版本
 - 确保 `registry/index.json` 存在
+- 开发时，CLI 会优先使用本地文件，无需推送到 GitHub
 
 ## 📚 参考
 

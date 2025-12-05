@@ -11,14 +11,96 @@ interface AddOptions {
   all?: boolean
 }
 
+/**
+ * Auto-detect project configuration
+ */
+async function autoDetectConfig(cwd: string): Promise<any> {
+  const packageJsonPath = path.resolve(cwd, 'package.json')
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error('No package.json found. Please run this command in a valid project.')
+  }
+
+  const packageJson = await fs.readJSON(packageJsonPath)
+  const isNext = packageJson.dependencies?.next || packageJson.devDependencies?.next
+  const hasTypeScript = fs.existsSync(path.resolve(cwd, 'tsconfig.json')) || 
+                        packageJson.devDependencies?.typescript ||
+                        packageJson.dependencies?.typescript
+
+  // Auto-detect import aliases
+  let componentsAlias = '@/components'
+  let utilsAlias = '@/lib/utils'
+  
+  const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
+  const jsconfigPath = path.resolve(cwd, 'jsconfig.json')
+  const configPath = fs.existsSync(tsconfigPath) ? tsconfigPath : 
+                     (fs.existsSync(jsconfigPath) ? jsconfigPath : null)
+  
+  if (configPath) {
+    try {
+      const config = await fs.readJSON(configPath)
+      const paths = config?.compilerOptions?.paths || {}
+      if (paths['@/*']) {
+        const basePath = paths['@/*'][0]?.replace('/*', '') || 'src'
+        componentsAlias = basePath === 'src' ? '@/components' : `@/${basePath}/components`
+        utilsAlias = basePath === 'src' ? '@/lib/utils' : `@/${basePath}/lib/utils`
+      }
+    } catch (e) {
+      // Use defaults
+    }
+  }
+
+  // Determine components directory
+  const componentsPath = componentsAlias.replace('@/', 'src/')
+  const utilsPath = utilsAlias.replace('@/', 'src/')
+
+  return {
+    style: 'default',
+    tailwind: {
+      config: isNext ? 'tailwind.config.ts' : 'tailwind.config.js',
+      css: isNext ? 'app/globals.css' : 'src/index.css',
+      baseColor: 'slate',
+      cssVariables: true,
+    },
+    rsc: isNext,
+    tsx: hasTypeScript,
+    aliases: {
+      components: componentsAlias,
+      utils: utilsAlias,
+    },
+    resolvedPaths: {
+      tailwindConfig: path.resolve(cwd, isNext ? 'tailwind.config.ts' : 'tailwind.config.js'),
+      tailwindCss: path.resolve(cwd, isNext ? 'app/globals.css' : 'src/index.css'),
+      utils: path.resolve(cwd, utilsPath),
+      components: path.resolve(cwd, componentsPath),
+    },
+  }
+}
+
 export async function add(components: string[], options: AddOptions) {
   const cwd = process.cwd()
 
-  // Check if initialized
-  const config = await getConfig(cwd)
+  // Try to get config, or auto-detect if not found
+  let config = await getConfig(cwd)
   if (!config) {
-    logger.error('Project not initialized. Run "taku-ui init" first.')
-    process.exit(1)
+    logger.info('No configuration found. Auto-detecting project structure...')
+    logger.break()
+    
+    try {
+      const autoConfig = await autoDetectConfig(cwd)
+      config = autoConfig as any
+      
+      logger.info('✓ Project structure detected')
+      logger.info(`  Components: ${config.aliases.components}`)
+      logger.info(`  Utils: ${config.aliases.utils}`)
+      logger.info(`  TypeScript: ${config.tsx ? 'Yes' : 'No'}`)
+      logger.break()
+      logger.info('💡 Tip: Run "taku-ui init" to customize these settings.')
+      logger.break()
+    } catch (error) {
+      logger.error('Failed to auto-detect project structure.')
+      logger.error('Please run "taku-ui init" first to configure your project.')
+      process.exit(1)
+    }
   }
 
   // Get registry path/URL
@@ -96,6 +178,22 @@ async function installComponent(
   overwrite: boolean
 ) {
   try {
+    // Ensure utils file exists (components might need it)
+    const utilsPath = path.resolve(config.resolvedPaths.utils)
+    if (!fs.existsSync(utilsPath)) {
+      await fs.ensureDir(path.dirname(utilsPath))
+      await fs.writeFile(
+        utilsPath,
+        `import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+`
+      )
+    }
+
     // Use registryPath or default to undefined (will use default remote URL)
     const component = await fetchComponent(name, registryPath || getRegistryUrl())
 

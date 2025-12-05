@@ -1,0 +1,24 @@
+{
+  "name": "window-control-icons",
+  "description": "Icons for window control buttons (close, minimize, maximize)",
+  "dependencies": [],
+  "files": [
+    {
+      "name": "icons/index.tsx",
+      "content": "export { CloseIcon } from './close-icon'\nexport { ExpandIcon } from './expand-icon'\nexport { RemoveIcon } from './remove-icon'\n"
+    },
+    {
+      "name": "icons/close-icon.tsx",
+      "content": "import React from 'react'\n\nexport function CloseIcon({ className }: { className?: string }) {\n  return (\n    <svg\n      width=\"100%\"\n      height=\"100%\"\n      viewBox=\"0 0 12 12\"\n      fill=\"none\"\n      xmlns=\"http://www.w3.org/2000/svg\"\n      className={className}\n      preserveAspectRatio=\"xMidYMid meet\"\n    >\n      <path\n        d=\"M2.375 2.375L9.625 9.625M9.625 2.375L2.375 9.625\"\n        stroke=\"currentColor\"\n        strokeWidth=\"1.5\"\n        strokeLinecap=\"round\"\n      />\n    </svg>\n  )\n}\n"
+    },
+    {
+      "name": "icons/expand-icon.tsx",
+      "content": "import React from 'react'\n\nexport function ExpandIcon({ className }: { className?: string }) {\n  return (\n    <svg\n      width=\"100%\"\n      height=\"100%\"\n      viewBox=\"0 0 12 12\"\n      fill=\"none\"\n      xmlns=\"http://www.w3.org/2000/svg\"\n      className={className}\n      preserveAspectRatio=\"xMidYMid meet\"\n    >\n      <path\n        d=\"M2.875 6.375V9.125H5.625M6.375 2.875H9.125V5.625\"\n        stroke=\"currentColor\"\n        strokeOpacity=\"0.5\"\n        strokeWidth=\"1.5\"\n        strokeLinecap=\"round\"\n        strokeLinejoin=\"round\"\n      />\n    </svg>\n  )\n}\n"
+    },
+    {
+      "name": "icons/remove-icon.tsx",
+      "content": "import React from 'react'\n\nexport function RemoveIcon({ className }: { className?: string }) {\n  return (\n    <svg\n      width=\"100%\"\n      height=\"100%\"\n      viewBox=\"0 0 12 12\"\n      fill=\"none\"\n      xmlns=\"http://www.w3.org/2000/svg\"\n      className={className}\n      preserveAspectRatio=\"xMidYMid meet\"\n    >\n      <g clipPath=\"url(#clip0_69_71)\">\n        <path\n          d=\"M8.12132 6.00023H3.87868M10.625 6C10.625 8.55432 8.55432 10.625 6 10.625C3.44568 10.625 1.375 8.55432 1.375 6C1.375 3.44568 3.44568 1.375 6 1.375C8.55432 1.375 10.625 3.44568 10.625 6Z\"\n          stroke=\"currentColor\"\n          strokeOpacity=\"0.5\"\n          strokeWidth=\"1.5\"\n          strokeLinecap=\"round\"\n          strokeLinejoin=\"round\"\n        />\n      </g>\n      <defs>\n        <clipPath id=\"clip0_69_71\">\n          <rect width=\"12\" height=\"12\" fill=\"white\" />\n        </clipPath>\n      </defs>\n    </svg>\n  )\n}\n"
+    }
+  ]
+}
+
