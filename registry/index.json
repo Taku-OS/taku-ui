@@ -1,0 +1,7 @@
+[
+  {
+    "name": "window-controls",
+    "description": "Window control buttons (close, minimize, maximize) for desktop applications",
+    "dependencies": ["class-variance-authority"]
+  }
+]
